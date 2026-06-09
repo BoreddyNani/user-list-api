@@ -8,10 +8,18 @@ const bcrypt = require('bcrypt');
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
 });
+const cors = require('cors');
 const app = express();
 const port = 3000;
 // CRITICAL: Middleware to parse incoming JSON payloads
 app.use(express.json());
+
+app.use(cors({
+  origin: '*', // Allows all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 
 let users = [];
 let nextId = 1;
