@@ -40,6 +40,13 @@ const authLoginSchema = z.object({
   password: z.string().min(6)
 });
 
+const ApplicationSchema = z.object({
+  company: z.string().min(1, "Company name is required"),
+  role: z.string().min(1, "Role is required"),
+  status: z.enum(['APPLIED', 'SCREEN', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN']),
+  notes: z.string().optional()
+});
+
 app.get('/', (req, res) => {
   res.send('Hello World!');
 });
@@ -135,6 +142,52 @@ app.delete("/users/:id", (req, res) => {
   }
   
   users.splice(idx, 1);
+  res.status(204).send();
+});
+
+// All 4 endpoints — add to your Express server
+app.get("/applications", authenticate, async (req, res) => {
+  const apps = await prisma.jobApplication.findMany({
+    where: { userId: req.user.userId },
+    orderBy: { appliedAt: "desc" }
+  });
+  res.json(apps);
+});
+
+app.post("/applications", authenticate, async (req, res) => {
+  const data = ApplicationSchema.parse(req.body);
+  const app = await prisma.jobApplication.create({
+    data: { ...data, 
+      user: { connect: { id: req.user.userId } }
+    }
+  });
+  res.status(201).json(app);
+});
+
+app.patch("/applications/:id", authenticate, async (req, res) => {
+  const appId = parseInt(req.params.id);
+  const existingApp = await prisma.jobApplication.findUnique({ where: { id: appId } });
+  if (!existingApp || existingApp.userId !== req.user.userId) {
+    return res.status(403).json({ error: "Unauthorized or not found" });
+  }
+  const updatedApp = await prisma.jobApplication.update({
+    where: { id: appId },
+    data: req.body
+  });
+
+  res.json(updatedApp);
+});
+
+app.delete("/applications/:id", authenticate, async (req, res) => {
+  const appId = parseInt(req.params.id);
+  const existingApp = await prisma.jobApplication.findUnique({ where: { id: appId } });
+  if (!existingApp || existingApp.userId !== req.user.userId) {
+    return res.status(403).json({ error: "Unauthorized or not found" });
+  }
+  await prisma.jobApplication.delete({
+    where: { id: appId }
+  });
+
   res.status(204).send();
 });
 

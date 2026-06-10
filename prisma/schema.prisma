@@ -18,6 +18,7 @@ model User1{
   email String @unique
   name String?
   password String
+  applications JobApplication[]
 }
 model Post { 
   id        Int     @id @default(autoincrement()) 
@@ -36,11 +37,14 @@ enum Status {
   WITHDRAWN
 }
 
-model JobAplication{
+model JobApplication{
   id Int @id @default(autoincrement())
   company String
   role String
   status Status
-  appliedAt DateTime
+  appliedAt DateTime @default(now())
   notes String?
+
+  user User1 @relation(fields: [userId], references: [id])
+  userId Int
 }
