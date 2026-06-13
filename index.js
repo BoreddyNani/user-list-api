@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { getCache, setCache, deleteCache } = require('./cache');
 const express = require('express');
 const { z } = require('zod');
 const { PrismaClient } = require('@prisma/client');
@@ -11,6 +12,12 @@ const prisma = new PrismaClient({
 const cors = require('cors');
 const app = express();
 const port = 3000;
+const { createClient } = require('redis');
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
+});
+redisClient.on('error', (err) => console.log('Redis Client Error', err));
+redisClient.connect().then(() => console.log('Connected to Redis!'));
 // CRITICAL: Middleware to parse incoming JSON payloads
 app.use(express.json());
 
@@ -147,10 +154,18 @@ app.delete("/users/:id", (req, res) => {
 
 // All 4 endpoints — add to your Express server
 app.get("/applications", authenticate, async (req, res) => {
+  const cacheKey = `applications:${req.user.userId}`;
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    console.log("CACHE HIT");
+    return res.json(cached);
+  }
+  console.log("CACHE MISS");
   const apps = await prisma.jobApplication.findMany({
     where: { userId: req.user.userId },
     orderBy: { appliedAt: "desc" }
   });
+  await setCache(cacheKey, apps);
   res.json(apps);
 });
 
@@ -161,6 +176,7 @@ app.post("/applications", authenticate, async (req, res) => {
       user: { connect: { id: req.user.userId } }
     }
   });
+  await deleteCache(`applications:${req.user.userId}`);
   res.status(201).json(app);
 });
 
