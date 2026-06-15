@@ -6,6 +6,8 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const { GoogleGenAI } = require('@google/genai');
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
 });
@@ -54,6 +56,11 @@ const ApplicationSchema = z.object({
   notes: z.string().optional()
 });
 
+const ResumeSchema = z.object({
+  jobDescription: z.string().min(1, "Job description is required"),
+  currentResume: z.string().min(1, "Current resume is required")
+});
+
 app.get('/', (req, res) => {
   res.send('Hello World!');
 });
@@ -70,6 +77,8 @@ app.get('/job', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch job applications', details: err.message });
   }
 });
+
+
 
 app.post('/users', (req, res, next) => {
   try {
@@ -205,6 +214,32 @@ app.delete("/applications/:id", authenticate, async (req, res) => {
   });
 
   res.status(204).send();
+});
+
+//aicall
+app.post('/ai/resume-tips', authenticate , async(req, res, next) => {
+  try {
+    
+    const { jobDescription, currentResume } = ResumeSchema.parse(req.body);
+    const prompt = `You are an expert resume reviewer. Job Description: ${jobDescription} Current Resume: ${currentResume} Provide exactly 5 specific, actionable resume improvement suggestions. Each suggestion must: - Reference a specific skill or requirement from the job description - Suggest concrete wording to add or change in the resume - Be under 40 words Format as a numbered list 1-5. No preamble, no conclusion.`;
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt
+    });
+    
+    
+    res.json({ tips: response.text }); 
+
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      console.log("Zod Validation Failed:", err);
+      return res.status(400).json({ 
+        message: "Validation failed", 
+        details: err.flatten()
+      });
+    }
+    next(err);
+  }
 });
 
 // Global error handler
