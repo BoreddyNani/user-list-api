@@ -44,7 +44,7 @@ model JobApplication{
   status Status
   appliedAt DateTime @default(now())
   notes String?
-
+  resumeUrl String?
   user User1 @relation(fields: [userId], references: [id])
   userId Int
 }

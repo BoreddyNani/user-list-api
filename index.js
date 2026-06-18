@@ -4,6 +4,9 @@ const express = require('express');
 const { z } = require('zod');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
+const {S3Client}= require('@aws-sdk/client-s3')
+const{Upload } =require( '@aws-sdk/lib-storage');
+const { upload, uploadToS3 } = require('./upload.js');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenAI } = require('@google/genai');
@@ -37,6 +40,8 @@ const userSchema = z.object({
   name: z.string(),
   age: z.number().int().positive() // Added .int() and .positive() for better validation
 });
+
+
 
 const authRegisterSchema = z.object({
   email: z.string().email(),
@@ -216,6 +221,19 @@ app.delete("/applications/:id", authenticate, async (req, res) => {
   res.status(204).send();
 });
 
+app.post("/applications/:id/resume", authenticate, upload.single("resume"),
+  async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const url = await uploadToS3(req.file, req.user.userId, req.params.id);
+      const updated = await prisma.jobApplication.update({
+        where: { id: parseInt(req.params.id), userId: req.user.userId },
+        data: { resumeUrl: url }
+      });
+      res.json({ resumeUrl: url });
+    } catch (err) { next(err); }
+  }
+);
 //aicall
 app.post('/ai/resume-tips', authenticate , async(req, res, next) => {
   try {
@@ -241,6 +259,8 @@ app.post('/ai/resume-tips', authenticate , async(req, res, next) => {
     next(err);
   }
 });
+
+
 
 // Global error handler
 app.use((err, req, res, next) => {
