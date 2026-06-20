@@ -21,6 +21,8 @@ const { createClient } = require('redis');
 const redisClient = createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
+const stripe= require('stripe')(process.env.STRIPE_SECRET_KEY)
+
 redisClient.on('error', (err) => console.log('Redis Client Error', err));
 redisClient.connect().then(() => console.log('Connected to Redis!'));
 // CRITICAL: Middleware to parse incoming JSON payloads
@@ -154,6 +156,35 @@ const authenticate = (req, res, next) => {
   }
 };
 
+app.get('/auth/me', authenticate, async (req, res) => {
+  try {
+    
+    const user = await prisma.user1.findUnique({
+      where: { id: req.user.userId } 
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // 2. Mint a brand new token with the current isPro status
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        email: user.email, 
+        name: user.name,
+        isPro: user.isPro // This will now be TRUE after Stripe webhook fires!
+      }, 
+      process.env.JWT_SECRET, // Make sure this matches your login secret
+      { expiresIn: '24h' }
+    );
+
+    // 3. Send it back to React
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error fetching user profile' });
+  }
+});
 app.delete("/users/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
   const idx = users.findIndex(u => u.id === id);
@@ -259,6 +290,52 @@ app.post('/ai/resume-tips', authenticate , async(req, res, next) => {
     next(err);
   }
 });
+
+app.post("/create-checkout-session", authenticate, async (req, res) => {
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    mode: "subscription",
+    line_items: [{
+      price_data: {
+        currency: "usd",
+        product_data: { name: "Job Tracker Pro" },
+        unit_amount: 900,          // $9.00 in cents
+        recurring: { interval: "month" }
+      },
+      quantity: 1
+    }],
+    success_url: `${process.env.FRONTEND_URL}/dashboard?upgraded=true`,
+    cancel_url:  `${process.env.FRONTEND_URL}/dashboard?cancelled=true`,
+    metadata: { userId: String(req.user.userId) }  // carry user ID through
+  });
+  res.json({ url: session.url });
+});
+
+app.post("/webhook",
+  express.raw({ type: "application/json" }),   // raw body required for sig verify
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body, sig, process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      const userId  = parseInt(session.metadata.userId);
+      await prisma.user.update({
+        where: { id: userId },
+        data:  { isPro: true }
+      });
+      console.log(`User ${userId} upgraded to Pro`);
+    }
+    res.json({ received: true });
+  }
+);
 
 
 
