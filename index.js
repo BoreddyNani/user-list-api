@@ -19,7 +19,7 @@ const app = express();
 const port = 3000;
 const { createClient } = require('redis');
 const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
+  url: process.env.REDIS_URL || 'redis://red-d8su9d36sc1c73dtq980:6379'
 });
 const stripe= require('stripe')(process.env.STRIPE_SECRET_KEY)
 
