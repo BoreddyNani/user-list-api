@@ -17,14 +17,7 @@ const prisma = new PrismaClient({
 const cors = require('cors');
 const app = express();
 const port = 3000;
-const { createClient } = require('redis');
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://red-d8su9d36sc1c73dtq980:6379'
-});
-const stripe= require('stripe')(process.env.STRIPE_SECRET_KEY)
-
-redisClient.on('error', (err) => console.log('Redis Client Error', err));
-redisClient.connect().then(() => console.log('Connected to Redis!'));
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 // CRITICAL: Middleware to parse incoming JSON payloads
 app.use(express.json());
 
@@ -115,8 +108,20 @@ app.post("/auth/register", async (req, res, next) => {
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || "secret", {
       expiresIn: "7d"
     });
-    res.status(201).json({ token });
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isPro: user.isPro,
+      token
+    });
   } catch (err) {
+    const isUniqueConstraint = err?.code === 'P2002'
+      || err?.meta?.code === 'P2002'
+      || err?.meta?.cause?.code === 'P2002';
+    if (isUniqueConstraint) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
     next(err);
   }
 });
@@ -350,6 +355,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
+module.exports = { app, prisma };
+
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Example app listening on port ${port}`);
+  });
+}

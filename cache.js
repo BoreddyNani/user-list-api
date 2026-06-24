@@ -1,15 +1,27 @@
 const Redis = require("ioredis");
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');          // defaults to localhost:6379
+let redis;
+
+const getRedisClient = () => {
+  if (!redis) {
+    redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+  }
+  return redis;
+};
 
 const getCache = async (key) => {
-  const val = await redis.get(key);
+  const client = getRedisClient();
+  const val = await client.get(key);
   return val ? JSON.parse(val) : null;
 };
 
 const setCache = async (key, value, ttl = 60) => {
-  await redis.setex(key, ttl, JSON.stringify(value));
+  const client = getRedisClient();
+  await client.setex(key, ttl, JSON.stringify(value));
 };
 
-const deleteCache = async (key) => redis.del(key);
+const deleteCache = async (key) => {
+  const client = getRedisClient();
+  return client.del(key);
+};
 
 module.exports = { getCache, setCache, deleteCache };
