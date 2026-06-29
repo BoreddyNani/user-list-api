@@ -43,7 +43,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:Nani143@localhost:5432/job_tracker_db?schema=public
           JWT_SECRET: tarunnaniboreddyammuharikapallavimanjusaraswathi
-        run: npm test -- --coverage --forceExit
+        run: npm test --forceExit
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
